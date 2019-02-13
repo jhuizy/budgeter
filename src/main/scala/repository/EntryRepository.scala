@@ -10,7 +10,7 @@ import doobie.util.transactor.Transactor
 import doobie.implicits._
 import doobie.util.meta.Meta
 import doobie.util.update.Update
-import model.{AttachmentId, CreateEntry, Entry, EntryId}
+import model._
 
 class EntryRepository(transactor: Transactor[IO]) {
 
@@ -29,13 +29,12 @@ class EntryRepository(transactor: Transactor[IO]) {
     attachmentUrls.map { url => sql"INSERT INTO attachments (url, entry_id) VALUES (${url}, ${entryId})".update.withUniqueGeneratedKeys[Long]("id").map(AttachmentId) }.sequence
   }
 
-  def getEntry(id: EntryId): IO[Entry] = {
-    for {
-      entry <- sql"SELECT description, amount, date, account_id FROM entries WHERE id = ${id}".query[(Option[String], Double, Timestamp, Long)].option
-      attachments <- sql"SELECT url FROM attachments WHERE entry_id = ${id}".query[String].option
-      result <- Entry(entry, attachment)
-    } yield (entry, attachments)
+  def getEntry(id: EntryId): IO[Option[Entry]] = {
+    val q = for {
+      entry <- sql"SELECT description, amount, date, account_id FROM entries WHERE id = ${id}".query[(Long, Option[String], Double, Timestamp, Long)].option
+      attachments <- sql"SELECT url FROM attachments WHERE entry_id = ${id}".query[String].to[List]
+    } yield entry.map { e => Entry(EntryId(e._1), AccountId(e._5), e._2, e._3, e._4, attachments) }
 
+    q.transact(transactor)
   }
-
 }

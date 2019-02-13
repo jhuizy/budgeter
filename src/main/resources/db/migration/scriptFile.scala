@@ -1,1 +1,0 @@
-  url TEXT NOT NULL

@@ -11,7 +11,7 @@ class AccountRepository(transactor: Transactor[IO]) {
 
   implicit val accountIdMeta: Meta[AccountId] = Meta[Long].xmap(AccountId, _.id)
 
-  def createAccount(account: Account): IO[Account]= {
+  def createAccount(account: Account): IO[Account] = {
     sql"INSERT INTO accounts (name, description) VALUES (${account.name}, ${account.description})"
       .update
       .withUniqueGeneratedKeys[Long]("id")
