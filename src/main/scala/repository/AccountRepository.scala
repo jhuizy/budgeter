@@ -11,12 +11,12 @@ class AccountRepository(transactor: Transactor[IO]) {
 
   implicit val accountIdMeta: Meta[AccountId] = Meta[Long].xmap(AccountId, _.id)
 
-  def createAccount(account: Account): IO[Account] = {
-    sql"INSERT INTO accounts (name, description) VALUES (${account.name}, ${account.description})"
+  def createAccount(name: String, description: Option[String]): IO[Account] = {
+    sql"INSERT INTO accounts (name, description) VALUES (${name}, ${description})"
       .update
       .withUniqueGeneratedKeys[Long]("id")
       .transact(transactor)
-      .map { id => account.copy(id = Some(AccountId(id))) }
+      .map { id => Account(id = AccountId(id), name, description) }
   }
 
   def listAccounts: IO[List[Account]] = {

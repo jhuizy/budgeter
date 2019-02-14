@@ -1,7 +1,9 @@
 package service
 
 import cats.effect.IO
-import org.http4s.HttpService
+import cats.data.OptionT
+import cats.implicits._
+import org.http4s.{HttpService, Response}
 import org.http4s.dsl.io._
 import org.http4s.circe._
 import io.circe.generic.auto._
@@ -13,23 +15,24 @@ import repository.{AccountRepository, EntryRepository}
 class AccountService(accountRepository: AccountRepository, entryRepository: EntryRepository) {
 
   private case class CreateAccountRequest(name: String, description: Option[String])
-  private case class CreateAccountResponse(id: Long, name: String, description: Option[String])
+  private case class GetAccountResponse(id: Int, name: String, description: Option[String])
 
   val service = HttpService[IO] {
     case req @ POST -> Root / "accounts" =>
       for {
         r <- req.decodeJson[CreateAccountRequest]
-        _ <- accountRepository.createAccount(Account(None, r.name, r.description))
-        response <- Created(r.asJson)
+        account <- accountRepository.createAccount(r.name, r.description)
+        response <- Created(GetAccountResponse(account.id.id.toInt, account.name, account.description).asJson)
       } yield response
-
-    case GET -> Root / "accounts" / LongVar(id) =>
+    case GET -> Root / "accounts" =>
       for {
-        accountOption <- accountRepository.getAccountById(AccountId(id))
-        response <- accountOption match {
-          case Some(account) => Ok(account.asJson)
-          case None => NotFound
-        }
+        accounts <- accountRepository.listAccounts
+        response <- Ok(accounts.map { acc => GetAccountResponse(acc.id.id.toInt, acc.name, acc.description) }.asJson)
+      } yield response
+    case GET -> Root / "accounts" / IntVar(id) =>
+      for {
+        account <- accountRepository.getAccountById(AccountId(id.toLong))
+        response <- account.map { a => Ok(a.asJson) }.getOrElse(NotFound())
       } yield response
   }
 

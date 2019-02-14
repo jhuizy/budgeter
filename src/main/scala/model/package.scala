@@ -19,7 +19,7 @@ package object model {
   case object TodoNotFoundError
 
   case class AccountId(id: Long)
-  case class Account(id: Option[AccountId], name: String, description: Option[String])
+  case class Account(id: AccountId, name: String, description: Option[String])
 
   case class EntryId(id: Long)
   case class CreateEntry(accountId: AccountId, description: Option[String], amount: Double, date: Timestamp, attachments: List[String])
