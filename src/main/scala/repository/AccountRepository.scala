@@ -9,7 +9,7 @@ import doobie.implicits._
 
 class AccountRepository(transactor: Transactor[IO]) {
 
-  implicit val accountIdMeta: Meta[AccountId] = Meta[Long].xmap(AccountId, _.id)
+  implicit val accountIdMeta: Meta[AccountId] = Meta[Long].xmap(AccountId, _.value)
 
   def createAccount(name: String, description: Option[String]): IO[Account] = {
     sql"INSERT INTO accounts (name, description) VALUES (${name}, ${description})"
@@ -20,14 +20,14 @@ class AccountRepository(transactor: Transactor[IO]) {
   }
 
   def listAccounts: IO[List[Account]] = {
-    sql"SELECT (id, name, description) FROM accounts"
+    sql"SELECT id, name, description FROM accounts"
       .query[Account]
       .to[List]
       .transact(transactor)
   }
 
-  def getAccountById(id: AccountId): IO[Option[Account]] = {
-    sql"SELECT (id, name, description) FROM accounts WHERE id = ${id}"
+  def getAccountById(id: Long): IO[Option[Account]] = {
+    sql"SELECT id, name, description FROM accounts WHERE id = ${id}"
       .query[Account]
       .option
       .transact(transactor)
