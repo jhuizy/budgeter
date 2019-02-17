@@ -15,12 +15,15 @@ import           Data.Time.Clock
 
 import qualified Accounts.DB                    as Accounts
 import           Accounts.Model
+
 import           Database.SQLite.Simple
 import           Database.SQLite.Simple.FromRow
+import qualified Entries.DB                     as Entries
+import           Entries.Model
 
-import Data.Char (toLower)
 import           Data.Aeson
 import           Data.Aeson.Types
+import           Data.Char                      (toLower)
 import           GHC.Generics
 
 data CreateAccountDTO = CreateAccountDTO
@@ -50,6 +53,7 @@ main = do
 app :: SpockM Connection MySession () ()
 app = do
     runQuery Accounts.migration
+    runQuery Entries.migration
 
     get root $
         text "Hello World!"

@@ -1,5 +1,3 @@
-{-# LANGUAGE DeriveGeneric     #-}
-
 module Accounts.Model where
 
 newtype AccountId = AccountId { unAccountId :: Int } deriving (Show)
