@@ -20,4 +20,8 @@ executable budgeter
   build-depends:       base >= 4.7 && < 5
                      , Spock >= 0.11
                      , mtl
+                     , aeson
                      , text
+                     , time
+                     , sqlite-simple
+                     , resource-pool
