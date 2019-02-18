@@ -26,6 +26,8 @@ import           Data.Aeson.Types
 import           Data.Char                      (toLower)
 import           GHC.Generics
 
+import           Network.HTTP.Types.Status
+
 data CreateAccountDTO = CreateAccountDTO
     { caName        :: String
     , caDescription :: Maybe String
@@ -37,10 +39,29 @@ data AccountDTO = AccountDTO
     , aDescription :: Maybe String
     } deriving (Generic)
 
+data CreateEntryDTO = CreateEntryDTO
+    { ceDescription :: Maybe String
+    , ceAmount      :: Double
+    , ceAttachments :: [String]
+    } deriving (Generic)
+
+data EntryDTO = EntryDTO
+    { eEntryId     :: Int
+    , eAccountId   :: Int
+    , eDescription :: Maybe String
+    , eAmount      :: Double
+    , eAttachments :: [String]
+    } deriving (Generic)
+
 instance FromJSON CreateAccountDTO where
     parseJSON = genericParseJSON defaultOptions { fieldLabelModifier = map toLower . drop 2 }
 instance ToJSON AccountDTO where
     toJSON = genericToJSON defaultOptions { fieldLabelModifier = map toLower . drop 1 }
+instance FromJSON CreateEntryDTO where
+    parseJSON = genericParseJSON defaultOptions { fieldLabelModifier = map toLower . drop 2 }
+instance ToJSON EntryDTO where
+    toJSON = genericToJSON defaultOptions { fieldLabelModifier = map toLower . drop 1 }
+
 
 data MySession = EmptySession
 
@@ -63,7 +84,23 @@ app = do
         Web.Spock.json $ AccountDTO id name desc
     get "accounts" $ do
         accounts <- runQuery Accounts.list
-        Web.Spock.json $ f <$> accounts
-        where
-            f (Account (AccountId id) name desc) = AccountDTO id name desc
+        Web.Spock.json $ mapAccount <$> accounts
+    post ("accounts" <//> var <//> "entries") $ \accountId -> do
+        (CreateEntryDTO desc amount attachments) <- jsonBody'
+        maybeAccount <- runQuery $ Accounts.get accountId
+        case maybeAccount of
+            Just (Account actualAccountId _ _) -> do
+                entry <- runQuery $ Entries.create $ CreateEntry actualAccountId desc amount attachments
+                Web.Spock.json $ EntryDTO (unEntryId . entryEntryId $ entry) accountId desc amount attachments
+            Nothing -> do
+                setStatus status404
+                text "Not Found"
+    where
+        mapAccount (Account (AccountId id) name desc) = AccountDTO id name desc
+
+
+
+
+
+
 

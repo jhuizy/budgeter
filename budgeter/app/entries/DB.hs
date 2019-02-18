@@ -39,7 +39,7 @@ migration conn = do
 
 create :: CreateEntry -> Connection -> IO Entry
 create (CreateEntry (AccountId accountId) desc amount attachments) conn = do
-  execute conn "INSERT INTO entries (account_id, description, amount) VAUES (?, ?, ?)" (accountId, desc, amount)
+  execute conn "INSERT INTO entries (account_id, description, amount) VALUES (?, ?, ?)" (accountId, desc, amount)
   id <- lastInsertRowId conn
   traverse (insertAttachment id) attachments
   return $ Entry (EntryId $ fromEnum id) (AccountId accountId) desc amount attachments

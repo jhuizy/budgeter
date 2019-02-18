@@ -25,3 +25,4 @@ executable budgeter
                      , time
                      , sqlite-simple
                      , resource-pool
+                     , http-types
