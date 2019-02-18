@@ -26,3 +26,4 @@ executable budgeter
                      , sqlite-simple
                      , resource-pool
                      , http-types
+                     , blaze-html

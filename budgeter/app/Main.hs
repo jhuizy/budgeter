@@ -6,8 +6,10 @@ module Main where
 import           Web.Spock
 import           Web.Spock.Config
 
+import           Control.Monad
 import           Control.Monad.Trans
 import           Data.IORef
+import           Data.Maybe
 import           Data.Monoid
 import           Data.Pool
 import qualified Data.Text                      as T
@@ -27,6 +29,9 @@ import           Data.Char                      (toLower)
 import           GHC.Generics
 
 import           Network.HTTP.Types.Status
+import           Text.Blaze.Html                (Html, toHtml)
+import           Text.Blaze.Html.Renderer.Utf8  (renderHtml)
+import qualified Text.Blaze.Html5               as H
 
 data CreateAccountDTO = CreateAccountDTO
     { caName        :: String
@@ -71,6 +76,27 @@ main = do
     spockCfg <- defaultSpockCfg EmptySession conn ()
     runSpock 8080 (spock spockCfg app)
 
+
+blaze :: MonadIO m => Html -> ActionCtxT ctx m a
+blaze = lazyBytes . renderHtml
+
+viewEntries :: [Entry] -> H.Html
+viewEntries entries = do
+    H.table $ do
+        H.thead $ do
+            H.tr $ do
+                H.th "ID"
+                H.th "Description"
+                H.th "Amount"
+                H.th "Attachments"
+        H.tbody $ do
+            forM_ entries $ \entry -> do
+                H.tr $ do
+                    H.td . toHtml . unEntryId . entryEntryId $ entry
+                    H.td . toHtml . (fromMaybe "-") . entryDescription $ entry
+                    H.td . toHtml . entryAmount $ entry
+                    H.td "-"
+
 app :: SpockM Connection MySession () ()
 app = do
     runQuery Accounts.migration
@@ -80,22 +106,41 @@ app = do
         text "Hello World!"
     post "accounts" $ do
         (CreateAccountDTO name desc) <- jsonBody'
-        (Account (AccountId id) _ _) <- runQuery $ Accounts.create (CreateAccount name desc)
-        Web.Spock.json $ AccountDTO id name desc
+        account <- runQuery $ Accounts.create (CreateAccount name desc)
+        Web.Spock.json $ mapAccount account
     get "accounts" $ do
         accounts <- runQuery Accounts.list
         Web.Spock.json $ mapAccount <$> accounts
+    get ("accounts" <//> var <//> "entries.html") $ \accountId -> do
+        maybeAccount <- runQuery $ Accounts.get accountId
+        case maybeAccount of
+            Just (Account actualAccountId _ _) -> do
+                entries <- runQuery $ Entries.list actualAccountId
+                blaze $ viewEntries entries
+            Nothing -> do
+                setStatus status404
+                text "Account not found"
+    get ("accounts" <//> var <//> "entries") $ \accountId -> do
+        maybeAccount <- runQuery $ Accounts.get accountId
+        case maybeAccount of
+            Just (Account actualAccountId _ _) -> do
+                entries <- runQuery $ Entries.list actualAccountId
+                Web.Spock.json $ mapEntry <$> entries
+            Nothing -> do
+                setStatus status404
+                text "Account not found"
     post ("accounts" <//> var <//> "entries") $ \accountId -> do
         (CreateEntryDTO desc amount attachments) <- jsonBody'
         maybeAccount <- runQuery $ Accounts.get accountId
         case maybeAccount of
             Just (Account actualAccountId _ _) -> do
                 entry <- runQuery $ Entries.create $ CreateEntry actualAccountId desc amount attachments
-                Web.Spock.json $ EntryDTO (unEntryId . entryEntryId $ entry) accountId desc amount attachments
+                Web.Spock.json $ mapEntry entry
             Nothing -> do
                 setStatus status404
-                text "Not Found"
+                text "Account not found"
     where
+        mapEntry (Entry (EntryId id) (AccountId accountId) desc amount attachments) = EntryDTO id accountId desc amount attachments
         mapAccount (Account (AccountId id) name desc) = AccountDTO id name desc
 
 
