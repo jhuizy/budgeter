@@ -15,6 +15,9 @@ import           Data.Pool
 import qualified Data.Text                      as T
 import           Data.Time.Clock
 
+import qualified Users.DB                       as Users
+import           Users.Model
+
 import qualified Accounts.DB                    as Accounts
 import           Accounts.Model
 
@@ -60,6 +63,25 @@ data EntryDTO = EntryDTO
     , eAttachments :: [String]
     } deriving (Generic)
 
+data CreateUserDTO = CreateUserDTO
+    { cuEmail    :: String
+    , cuPassword :: String
+    } deriving (Generic)
+
+data UserDTO = UserDTO
+    { uId    :: Int
+    , uEmail :: String
+    } deriving (Generic)
+
+data LoginDTO = LoginDTO
+    { lEmail    :: String
+    , lPassword :: String
+    } deriving (Generic)
+
+newtype TokenDTO = TokenDTO
+    { tToken :: String
+    } deriving (Generic)
+
 instance FromJSON CreateAccountDTO where
     parseJSON = genericParseJSON defaultOptions { fieldLabelModifier = map toLower . drop 2 }
 instance ToJSON AccountDTO where
@@ -67,6 +89,14 @@ instance ToJSON AccountDTO where
 instance FromJSON CreateEntryDTO where
     parseJSON = genericParseJSON defaultOptions { fieldLabelModifier = map toLower . drop 2 }
 instance ToJSON EntryDTO where
+    toJSON = genericToJSON defaultOptions { fieldLabelModifier = map toLower . drop 1 }
+instance FromJSON CreateUserDTO where
+    parseJSON = genericParseJSON defaultOptions { fieldLabelModifier = map toLower . drop 2 }
+instance ToJSON UserDTO where
+    toJSON = genericToJSON defaultOptions { fieldLabelModifier = map toLower . drop 1 }
+instance FromJSON LoginDTO where
+    parseJSON = genericParseJSON defaultOptions { fieldLabelModifier = map toLower . drop 1 }
+instance ToJSON TokenDTO where
     toJSON = genericToJSON defaultOptions { fieldLabelModifier = map toLower . drop 1 }
 
 
@@ -90,6 +120,7 @@ viewEntries entries = do
                 H.th "ID"
                 H.th "Description"
                 H.th "Amount"
+                H.th "Categories"
                 H.th "Attachments"
         H.tbody $ do
             forM_ entries $ \entry -> do
@@ -97,15 +128,46 @@ viewEntries entries = do
                     H.td . toHtml . unEntryId . entryEntryId $ entry
                     H.td . toHtml . (fromMaybe "-") . entryDescription $ entry
                     H.td . toHtml . entryAmount $ entry
+                    H.td . toHtml . unwords . entryCategories $ entry
                     H.td "-"
 
 app :: SpockM Connection MySession () ()
 app = do
     runQuery Accounts.migration
     runQuery Entries.migration
+    runQuery Users.migration
 
-    get root $
-        text "Hello World!"
+    post "users" $ do
+        (CreateUserDTO email password) <- jsonBody'
+        case mkUserEmail email of
+            Nothing -> do
+                setStatus status400
+                text "Email not formatted correctly"
+            Just email' -> do
+                password' <- liftIO $ mkUserHashedPassword password
+                user <- runQuery $ Users.create $ CreateUser email' password'
+                Web.Spock.json $ mapUser user
+    post "login" $ do
+        (LoginDTO email password) <- jsonBody'
+        case mkUserEmail email of
+            Nothing -> do
+                setStatus status400
+                text "Email not formatted correctly"
+            Just email' -> do
+                password' <- liftIO $ mkUserHashedPassword password
+                user <- runQuery $ Users.find email'
+                case user of 
+                    Nothing -> do
+                        setStatus status404
+                        text "Email not found"
+                    Just user' -> 
+                        case userPassword user' == password' of
+                            True -> do
+                                (UserToken token) <- liftIO $ mkUserToken user'
+                                Web.Spock.json $ TokenDTO token
+                            False -> do
+                                setStatus status403
+                                text "Forbidden"
     post "accounts" $ do
         (CreateAccountDTO name desc) <- jsonBody'
         account <- runQuery $ Accounts.create (CreateAccount name desc)
@@ -145,6 +207,7 @@ app = do
                 setStatus status404
                 text "Account not found"
     where
+        mapUser (User (UserId id) (UserEmail email) _) = UserDTO id email
         mapEntry (Entry (EntryId id) (AccountId accountId) desc amount categories attachments) = EntryDTO id accountId desc amount categories attachments
         mapAccount (Account (AccountId id) name desc) = AccountDTO id name desc
 

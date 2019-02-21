@@ -1,6 +1,11 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Entries.DB where
+module Entries.DB
+  ( migration
+  , create
+  , list
+  , listByCategory
+  ) where
 
 import           Accounts.Model
 import           Control.Monad
@@ -79,13 +84,19 @@ create (CreateEntry (AccountId accountId) desc amount categories attachments) co
 list :: AccountId -> Connection -> IO [Entry]
 list (AccountId accountId) conn = do
   entries <- query conn "SELECT id, account_id, description, amount FROM entries WHERE account_id = ?" (Only accountId) :: IO [EntryEntity]
-  forM entries $ \(EntryEntity id _ description amount) -> do
-    attachments <- fetchAttachments id
-    categories <- fetchCategories id
-    return $ Entry (EntryId $ fromEnum id) (AccountId accountId) description amount categories attachments
-  where
-    fetchAttachments entryId = fmap fromOnly <$> (query conn "SELECT url FROM attachments WHERE entry_id = ?" (Only entryId) :: IO [Only String])
-    fetchCategories entryId = fmap fromOnly <$> (query conn "SELECT label FROM categories INNER JOIN category_entries ON category_id = id WHERE entry_id = ?" (Only entryId) :: IO [Only String])
+  forM entries $ fetchEntry conn
+
+fetchAttachments :: Connection -> Int -> IO [String]
+fetchAttachments conn entryId = fmap fromOnly <$> (query conn "SELECT url FROM attachments WHERE entry_id = ?" (Only entryId) :: IO [Only String])
+
+fetchCategories :: Connection -> Int -> IO [String]
+fetchCategories conn entryId = fmap fromOnly <$> (query conn "SELECT label FROM categories INNER JOIN category_entries ON category_id = id WHERE entry_id = ?" (Only entryId) :: IO [Only String])
+
+fetchEntry :: Connection -> EntryEntity -> IO Entry
+fetchEntry conn (EntryEntity entryId accountId description amount) = do
+  attachments <- fetchAttachments conn entryId
+  categories <- fetchCategories conn entryId
+  return $ Entry (EntryId entryId) (AccountId accountId) description amount categories attachments
 
 listByCategory :: String -> Connection -> IO [Entry]
 listByCategory label conn = do
@@ -94,13 +105,8 @@ listByCategory label conn = do
     Nothing -> return []
     Just categoryId -> do
       entryIds <- query conn "SELECT entry_id FROM category_entries WHERE category_id = ?" categoryId :: IO [Only Int]
-      entries <- forM entryIds $ \entryId -> query conn "SELECT id, account_id, description, amount FROM entries WHERE id = ?" entryId :: IO [EntryEntity]
-      traverse fetchAttachments $ concat entries
-  where
-    fetchAttachments (EntryEntity entryId accountId description amount) = do
-      attachments <- query conn "SELECT id, entry_id, url FROM attachments WHERE entry_id = ?" (Only entryId)
-      let urls = attachmentEntityUrl <$> attachments
-      return $ Entry (EntryId $ fromEnum entryId) (AccountId accountId) description amount [label] urls
+      entryEntities <- forM entryIds $ \entryId -> query conn "SELECT id, account_id, description, amount FROM entries WHERE id = ?" entryId :: IO [EntryEntity]
+      forM (concat entryEntities) $ fetchEntry conn
 
 getOrCreateLabel :: String -> Connection -> IO CategoryEntity
 getOrCreateLabel label conn = do
