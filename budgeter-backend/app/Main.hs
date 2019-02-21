@@ -47,6 +47,7 @@ data AccountDTO = AccountDTO
 data CreateEntryDTO = CreateEntryDTO
     { ceDescription :: Maybe String
     , ceAmount      :: Double
+    , ceCategories  :: [String]
     , ceAttachments :: [String]
     } deriving (Generic)
 
@@ -55,6 +56,7 @@ data EntryDTO = EntryDTO
     , eAccountId   :: Int
     , eDescription :: Maybe String
     , eAmount      :: Double
+    , eCategories  :: [String]
     , eAttachments :: [String]
     } deriving (Generic)
 
@@ -129,18 +131,21 @@ app = do
             Nothing -> do
                 setStatus status404
                 text "Account not found"
+    get ("entries" <//> var) $ \categoryLabel -> do
+        entries <- runQuery $ Entries.listByCategory categoryLabel
+        Web.Spock.json $ mapEntry <$> entries
     post ("accounts" <//> var <//> "entries") $ \accountId -> do
-        (CreateEntryDTO desc amount attachments) <- jsonBody'
+        (CreateEntryDTO desc amount categories attachments) <- jsonBody'
         maybeAccount <- runQuery $ Accounts.get accountId
         case maybeAccount of
             Just (Account actualAccountId _ _) -> do
-                entry <- runQuery $ Entries.create $ CreateEntry actualAccountId desc amount attachments
+                entry <- runQuery $ Entries.create $ CreateEntry actualAccountId desc amount categories attachments
                 Web.Spock.json $ mapEntry entry
             Nothing -> do
                 setStatus status404
                 text "Account not found"
     where
-        mapEntry (Entry (EntryId id) (AccountId accountId) desc amount attachments) = EntryDTO id accountId desc amount attachments
+        mapEntry (Entry (EntryId id) (AccountId accountId) desc amount categories attachments) = EntryDTO id accountId desc amount categories attachments
         mapAccount (Account (AccountId id) name desc) = AccountDTO id name desc
 
 
