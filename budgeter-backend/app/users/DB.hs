@@ -36,10 +36,5 @@ find (UserEmail email) conn = do
   return $ userEntityToUser <$> listToMaybe users
   where
     userEntityToUser (UserEntity id email password) = User (UserId id) (UserEmail email) (UserHashedPassword password)
-
-getUserPassword :: UserEmail -> Connection -> IO (Maybe UserHashedPassword)
-getUserPassword (UserEmail email) conn = do
-  emails <- fmap fromOnly <$> (query conn "SELECT password FROM users WHERE email = ?" (Only email) :: IO [Only String])
-  return $ UserHashedPassword <$> listToMaybe emails
-
+ 
 

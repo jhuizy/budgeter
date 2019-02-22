@@ -1,4 +1,10 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 module Users.Model where
+
+import           Web.JWT
+
+import qualified Data.Text             as T
 
 newtype UserId = UserId { unUserId :: Int } deriving (Show)
 newtype UserEmail = UserEmail { unUserEmail :: String } deriving (Show)
@@ -22,10 +28,15 @@ data User = User
   } deriving (Show)
 
 mkUserEmail :: String -> Maybe UserEmail
-mkUserEmail s = Just . UserEmail
+mkUserEmail = Just . UserEmail
 
 mkUserHashedPassword :: String -> IO UserHashedPassword
-mkUserHashedPassword = return . UserHashedPassword 
+mkUserHashedPassword = return . UserHashedPassword
 
 mkUserToken :: User -> IO UserToken
-mkUserToken = return . UserToken . show
+mkUserToken user = return . UserToken . T.unpack $ encodeSigned HS256 s claims
+    where
+      s = secret . T.pack $ "secret"
+      subject = stringOrURI . T.pack . show . userEmail $ user
+      expirationDate = 234234042323
+      claims = def { Web.JWT.exp = numericDate expirationDate, Web.JWT.sub = subject }
